@@ -129,7 +129,7 @@ INSERT INTO learn.example(a,b,c) VALUES(3,10,4),(3,9,5),(3,8,6),(3,7,7),(3,6,8),
 - 数据按所在行的字段 b 排序
 - 所有 bin 的数据按行对应
 
-![bin without granularity](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-bin-without-granule.png)
+![bin without granularity](pics/clickhouse/merge-tree-bin-without-granule.png)
 
 问题
 - 只读取一行也需要加载整个文件
@@ -139,7 +139,7 @@ ClickHouse MergeTree 把 bin 文件根据颗粒度(GRANULARITY)划分为多个�
 
 SETTINGS index_granularity=3 表示每 ３ 行数据为一个 granule，分区目前只有 ７ 条数据，所以被划分成 3 个 granule(三个色块)
 
-![bin with granularity](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-bin-granule.png)
+![bin with granularity](pics/clickhouse/merge-tree-bin-granule.png)
 
 这样，每次就可以只读取需要的 granule
 
@@ -157,7 +157,7 @@ bin 文件的 granule 以压缩数据块的形式存储
 ### 数据标记
 为方便读取某个 granule，使用 *.mrk 文件记录每个 granule 的 offset，每个 granule 的 header 里会记录一些元信息，用于读取解析
 
-![bin marker](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-bin-marker.png)
+![bin marker](pics/clickhouse/merge-tree-bin-marker.png)
 
 这样就可以根据 ｍark 文件，直接定位到想要的 granule，然后对这个单独的 granule 进行读取、校验
 
@@ -167,14 +167,14 @@ bin 文件的 granule 以压缩数据块的形式存储
 ### 稀疏索引 
 
 数据是有序的
-![bin order by](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-bin-orderby-sort.png)
+![bin order by](pics/clickhouse/merge-tree-bin-orderby-sort.png)
 
 granule 的设计，使得 ClickHouse 天然的适合使用稀疏索引
 
 
 #### 主键索引
 取每个 granule 最小值作为索引值
-![primary key](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-primary-key.png)
+![primary key](pics/clickhouse/merge-tree-primary-key.png)
 
 #### skipping index
 普通索引
@@ -183,16 +183,16 @@ INDEXidx_c(c) TYPE minmax GRANULARITY 1 针对字段 c 创建一个 minmax 模�
 
 GRANULARITY 是指每多少个 granule 建立一行普通索引，GRANULARITY 1 表示每 1 个 granule 建立一行索引
 
-![skipping index g1](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-skipping-index-g1.png)
+![skipping index g1](pics/clickhouse/merge-tree-skipping-index-g1.png)
 
 如果定义为 GRANULARITY 2 ，则 2 个 granule 建立一行索引
 
-![skipping index g2](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-skipping-index-g2.png)
+![skipping index g2](pics/clickhouse/merge-tree-skipping-index-g2.png)
 
 #### minmax index
 针对分区键，MergeTree 还会创建一个 min/max 索引，来加速分区选择
 
-![minmax](https://bohutang-1253727613.cos.ap-beijing.myqcloud.com/posts/merge-tree-minmax-idx.png)
+![minmax](pics/clickhouse/merge-tree-minmax-idx.png)
 
 ## 查询
 ### 查询过程
