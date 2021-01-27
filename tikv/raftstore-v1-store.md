@@ -661,7 +661,7 @@ fn on_raft_ready(&mut self) {
 - 如果 raft_wb 非空
     - 用于持久化 RaftLocalState, Raft Log Entry
     - WriteOptions::set_sync(self.cfg.sync_log || sync_log)
-    - Storeraft_engine 写入 raft_wb ，失败直接 panic
+    - Store::raft_engine 写入 raft_wb ，失败直接 panic
 - 遍历 append_res
     - 根据 peer_id 从 region_peers 获取 peer
     - Peer::post_raft_ready_append()
@@ -669,6 +669,7 @@ fn on_raft_ready(&mut self) {
 - 遍历 ready_results
     - Peer::handle_raft_ready_apply()
     - 如果有 apply_result
+        - 这个实际上叫 apply_snapshot_result 更清晰些
         - Store::on_ready_apply_snapshot()
 - Store::apply_worker 执行 ApplyTask::applies(apply_tasks)
 - 执行 Store::trans flush()

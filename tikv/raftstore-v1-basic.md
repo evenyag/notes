@@ -805,5 +805,6 @@ impl<T: Transport, C: PdClient> mio::Handler for Store<T, C> {
 可以看到，定时消息， channel 里的消息等都是在这个 Handler 里处理的
 - channel 里的消息通过 Store::notify() 处理
 - 定时消息 Tick 会在 Store::timeout() 里处理
-- 周期性地调用 Store::tick()
+- 每次 EventLoop tick 时调用 Store::tick()
+    - 从 mio 的实现来看，每次事件处理 loop 的最后都会调用一次，因此理论上只要有时间触发，这个函数应该都能调用到
 
