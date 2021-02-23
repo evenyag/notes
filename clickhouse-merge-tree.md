@@ -259,7 +259,7 @@ select * from example where b=5
 ### 索引查询
 查询
 ```sql
-select * from default.mt where b=5
+select * from example where c=5
 ```
 
 查询会先从 3 个分区读取 prmary.idx 和 skp_idx_idx_c.idx 进行 granule 过滤（没用的 drop 掉），然后定位到只有 3_x_x_x 分区的一个 granule 符合条件
