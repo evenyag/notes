@@ -107,7 +107,7 @@ fn root() -> Result<(), Error> {
 ## thiserror + anyhow
 对于一些新的错误处理库，目前社区里较为主流的建议可能是组合使用 thiserror 和 anyhow 这两个库。其中 thiserror 可以看作是定义 Error 的一个工具，它只帮你生成一些定义 Error 的代码，别的什么都不做，相当纯粹。
 
-而 anyhow 则为你定义好了一个 Error 类型，基本可以看作是一个 `Box<dyn Error>` ，同时还提供了一些如 `context` 等扩展功能，用起来更加无脑
+而 anyhow 则为你定义好了一个 Error 类型，基本可以看作是一个 `Box<dyn Error>` ，同时还提供了一些如 `context` 等扩展功能，用起来更加无脑。
 ```rust
 use anyhow::{Context, Result};
 
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
 }
 ```
 
-除此之外， anyhow 的 Error 只占用一个指针大小的栈空间，相应的 Result 的栈空间占用也会变小，在一些[场景](https://zhuanlan.zhihu.com/p/191655266)下也比较有用
+除此之外， anyhow 的 Error 只占用一个指针大小的栈空间，相应的 Result 的栈空间占用也会变小，在一些[场景](https://zhuanlan.zhihu.com/p/191655266)下也比较有用。
 
 这两个库的作者 dtolnay 建议，如果你是在开发库，则用 thiserror ，而如果是开发应用则使用 anyhow 。这在实践时遇到的一个问题就是所谓库和应用的边界有时候并没有那么清晰：对一个多模块的应用来说，本质上也可以看作是由若干个库构成的，而这些模块或者"库"之间，也可能是有层级关系的。对于这些模块，使用 anyhow 就存在以下问题
 - 需要使用 anyhow 专门提供的 Error 类型，可能直接将 `anyhow::Error` 暴露到库的 api 上
@@ -165,6 +165,7 @@ fn unpack_config(data: &str) -> &str {
 - 基于 context selector 的 context 方案
     - 同样是 `io::Error` ， snafu 可以通过不同的 context 返回不同的 enum variant ，同时还能带上一些错误相关信息
     - 比起为 Error 直接实现 `From<io::Error>` 要更有意义，毕竟我们更希望拿到的错误告诉我是 read configuration 出错了，还是 write result 出错了，以及出错的文件 path 是哪个
+    - 本质上是把 context 的类型也提前定义了
 - 产生的 Error 就是我们自己定义的 Error，无需依赖 snafu 提供的 Error 类型
 - 这里其实还有一个隐含的好处，就是这个 Error 是可以做 pattern match 的
 
@@ -173,14 +174,14 @@ fn unpack_config(data: &str) -> &str {
 - 在库和应用的场景下都同样好用
 - 模块级别的 Error 类型，每个模块都应该定义一个，甚至多个自己专用的错误类型
 
-而这些设计哲学，我任务也是错误处理里比较好的实践。其中，关于 Error 类型应该做到模块级别还是做到 crate 级别（全局），可能会有较多争议，也值得发散开来聊聊。
+而这些设计哲学，我认为也是错误处理里比较好的实践。其中，关于 Error 类型应该做到模块级别还是做到 crate 级别（全局），可能会有较多争议，也值得发散开来聊聊。
 
 ## 模块级 Error 类型与全局 Error 类型
-先摆观点，我认为 Error 类型尽量做到模块级别是更好的，但是也要摆一个事实，那就是我自己的代码里这一点做得也还不够好。
+先摆观点，我认为 Error 类型尽量做到模块级别是更好的，甚至部分函数有专门的 Error 类型也不过分，但是也要摆一个事实，那就是我自己的代码里这一点做得也还不够好。
 
 所以，这里还是要提一下全局 Error 类型的一些好处，起码包括
 - 方便做一套全局的错误码，而且类型参数不合法就是比较常见的错误
-- 不需要话太多精力定义 Error 类型，很多 enum variant 可以共用，`Result<T, Error>` 也只需要定义一份，，这也是全局 Error 类型最大的优势
+- 不需要花太多精力定义 Error 类型，很多 enum variant 可以共用，`Result<T, Error>` 也只需要定义一份，，这也是全局 Error 类型最大的优势
 
 但是，全局 Error 类型也存在相应的缺陷
 - 所有用到了 Error 类型的模块，其实通过 Error 类型间接和其他模块耦合了，除非你的 Error 类型只想用 `anyhow::Error` 这样的类型
@@ -197,10 +198,12 @@ fn unpack_config(data: &str) -> &str {
 - 模块层次过深的话，或者一些模块的 Error 字段较多，由于 Rust enum 的特点，越上层的 Error 类型就会越大（std::mem::size_of::<Error>()），像 snafu 同样也会有这样的问题
 
 ## 总结
-错误处理可能不存在最佳方案一说，更多还是要结合实际场景。即便是谈到错误处理库，我要是大喊一声 snafu 是 Rust 最好的错误处理库，相信社区里肯定一堆人要打爆我的狗头了。而实际上 snafu 也存在自身的缺点，例如 Error 定义相对工作量大些， Error 类型体积可能会比较大等。
+错误处理可能不存在最佳方案一说，更多还是要结合实际场景。即便是谈到错误处理库，我要是大喊一声 snafu 是 Rust 最好的错误处理库，相信社区里肯定也会有一堆人跳出来反对我。而实际上 snafu 也存在自身的缺点，例如 Error 定义的工作量相对大（需要定义各种 context）， Error 类型体积可能会比较大等。
 
 总的来说，错误处理一直是一件麻烦的事。我觉得能做到错误的现场可追溯，就已经算错误处理做得不错了的。经过几年的发展， Rust 的错误处理库初步发展出了 context 和 backtrace 两种记录错误上下文的手段，同时也更加强大和易用了，但我认为目前他们尚未发展到终态，也尚未出现一个库独大的局面。如果说现在我新起个项目或者模块，需要选择一个错误处理库的话，我可能会先尝试下 snafu 。
 
+## 关于我们
+我们是蚂蚁智能监控技术中台的时序存储团队，我们正在使用 Rust 构建高性能、低成本并具备实时分析能力的新一代时序数据库，欢迎加入或者推荐，联系人 jiachun.fjc@antgroup.com
 
 ## 参考
 - https://blog.yoshuawuyts.com/error-handling-survey/
@@ -223,3 +226,4 @@ fn unpack_config(data: &str) -> &str {
 - https://github.com/tailhook/quick-error
 - https://github.com/rust-lang-nursery/failure
 - https://github.com/rust-lang-nursery/error-chain
+
