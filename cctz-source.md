@@ -573,7 +573,11 @@ Feb	    11	337
 ```
 结果如上面所示，这样有一个好处是闰年的处理会变得很简单
 
-这里问题会变成我们要寻找一个线性表达式 `a1 m' + a0` 来拟合这个趋势。这个斜率其实就是 337/11 = 30.63636363636364 。然而，计算机计算时的取整机制，因此事情变得复杂不少。我们实际上可以用一个单测来模拟这个场景
+这里问题会变成我们要寻找一个线性表达式
+```
+a1 m' + a0
+```
+来拟合这个趋势。这个斜率其实就是 337/11 = 30.63636363636364 。然而，计算机计算时的取整机制，因此事情变得复杂不少。我们实际上可以用一个单测来模拟这个场景
 ```c++
 #include <cassert>
 
@@ -686,9 +690,25 @@ CONSTEXPR_F weekday get_weekday(const civil_second& cs) noexcept {
   wd += wd / 4 - wd / 100 + wd / 400;
   wd += k_weekday_offsets[cs.month()] + cs.day();
   // 这里通过扩大 offset 数组来避免一次 % ，详见 https://github.com/google/cctz/commit/b14d4c984f9ca5bcc55c4e5b7e3818b23d70c004
+  // 不过 k_weekday_by_sun_off 就变成了现在的 k_weekday_by_mon_off
   return k_weekday_by_mon_off[wd % 7 + 6];
 }
+```
 
+这里可以看下原来的实现帮助理解，我们知道 7 是能够被 364 整除的 (364/7 = 52) ，因此假如我们计算得到第 0 年的星期，那么每过一年非闰年，相同年月对应的星期只需要将第 0 年的星期往后移一位就可以得到，而闰年则再加一位。因此，对于年 y ，只需要用第 0 年的星期数，加上 y 再加上中间的闰年数，取模就能映射到正确的星期
+```c++
+year_t wd = cd.year() - (cd.month() < 3);
+wd += wd / 4 - wd / 100 + wd / 400;
+```
+另外，原来的实现也用了类似将 3 月 1 号作为第一天的技巧
+
+而后面做了防止溢出的改进，实际上是将年份转化为一个不易溢出的年份来计算星期。这里需要注意，每 400 年有 146097 天，而 146097 是能够被 7 整除的（146097/7=20871），因此每 400 年的循环里星期数是不变的。因此我们可以只取模了 400 的部分。另外，这里选择将年份加上 2400 一个是因为 2400 是 400 的倍数，另外也是为了将年份转化到最近的年份，即使 `cd.year()` 是负数结果也是 2000 年后
+```c++
+year_t wd = 2400 + (cs.year() % 400) - (cs.month() < 3);
+```
+
+获取 next_weekday() 和 prev_weekday() 的逻辑则类似
+```c++
 CONSTEXPR_F civil_day next_weekday(civil_day cd, weekday wd) noexcept {
   CONSTEXPR_D weekday k_weekdays_forw[14] = {
       weekday::monday,    weekday::tuesday,  weekday::wednesday,
