@@ -631,3 +631,121 @@ mp = m + (m > 2 ? -3 : 9);
 const unsigned doy = (153*(m + (m > 2 ? -3 : 9)) + 2)/5 + d - 1;
 ```
 
+## 星期
+civil_time 里也提供了一些星期的计算函数
+```c++
+enum class weekday {
+  monday,
+  tuesday,
+  wednesday,
+  thursday,
+  friday,
+  saturday,
+  sunday,
+};
+
+// 这里主要通过打表来计算 weekday ，从 1970-01-01 开始的 weekday 都是 7 天的规律循环的，不过中间的计算逻辑做了非常多次
+// 的优化，因此比较晦涩，具体细节其实也没完全想清楚，不过核心还是打表
+// 更早的改动在 https://github.com/google/cctz/commit/0a5cc5000ee04ff6fd16d57cea1626a5d0b471d4
+// 改之前的实现在这里，可以方便理解逻辑
+// ```
+// CONSTEXPR_F weekday get_weekday(const civil_day& cd) noexcept {
+//   CONSTEXPR_D weekday k_weekday_by_thu_off[] = {
+//       weekday::thursday,  weekday::friday,  weekday::saturday,
+//       weekday::sunday,    weekday::monday,  weekday::tuesday,
+//       weekday::wednesday,
+//   };
+//   return k_weekday_by_thu_off[((cd - civil_day()) % 7 + 7) % 7];
+// }
+// ```
+CONSTEXPR_F weekday get_weekday(const civil_second& cs) noexcept {
+  CONSTEXPR_D weekday k_weekday_by_mon_off[13] = {
+      weekday::monday,    weekday::tuesday,  weekday::wednesday,
+      weekday::thursday,  weekday::friday,   weekday::saturday,
+      weekday::sunday,    weekday::monday,   weekday::tuesday,
+      weekday::wednesday, weekday::thursday, weekday::friday,
+      weekday::saturday,
+  };
+  CONSTEXPR_D int k_weekday_offsets[1 + 12] = {
+      -1, 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4,
+  };
+  // 2400 这个是在这个 commit 里来的 https://github.com/google/cctz/commit/776e781b05c976d59664744d7a8f0d830e84039c
+  // 主要是将年份映射到一个等价比较小的年份来避免溢出
+  // 原来的实现为
+  // ```
+  // year_t wd = cd.year() - (cd.month() < 3);
+  // if (wd >= 0) {
+  //   wd += wd / 4 - wd / 100 + wd / 400;
+  // } else {
+  //   wd += (wd - 3) / 4 - (wd - 99) / 100 + (wd - 399) / 400;
+  // }
+  // wd += k_weekday_offsets[cd.month()] + cd.day();
+  // return k_weekday_by_sun_off[(wd % 7 + 7) % 7];
+  // ```
+  year_t wd = 2400 + (cs.year() % 400) - (cs.month() < 3);
+  wd += wd / 4 - wd / 100 + wd / 400;
+  wd += k_weekday_offsets[cs.month()] + cs.day();
+  // 这里通过扩大 offset 数组来避免一次 % ，详见 https://github.com/google/cctz/commit/b14d4c984f9ca5bcc55c4e5b7e3818b23d70c004
+  return k_weekday_by_mon_off[wd % 7 + 6];
+}
+
+CONSTEXPR_F civil_day next_weekday(civil_day cd, weekday wd) noexcept {
+  CONSTEXPR_D weekday k_weekdays_forw[14] = {
+      weekday::monday,    weekday::tuesday,  weekday::wednesday,
+      weekday::thursday,  weekday::friday,   weekday::saturday,
+      weekday::sunday,    weekday::monday,   weekday::tuesday,
+      weekday::wednesday, weekday::thursday, weekday::friday,
+      weekday::saturday,  weekday::sunday,
+  };
+  // 拿到 cd 对应星期几
+  weekday base = get_weekday(cd);
+  for (int i = 0;; ++i) {
+    // 遍历上面的数组，直到发现星期数等于 wd
+    if (base == k_weekdays_forw[i]) {
+      for (int j = i + 1;; ++j) {
+        // 往后面一直迭代直到下个星期 wd
+        if (wd == k_weekdays_forw[j]) {
+          // 这时 j - i 就是从 cd 到下个 wd 过得天数，然后通过 cd 的加法运算即可
+          return cd + (j - i);
+        }
+      }
+    }
+  }
+}
+
+CONSTEXPR_F civil_day prev_weekday(civil_day cd, weekday wd) noexcept {
+  CONSTEXPR_D weekday k_weekdays_back[14] = {
+      weekday::sunday,   weekday::saturday,  weekday::friday,
+      weekday::thursday, weekday::wednesday, weekday::tuesday,
+      weekday::monday,   weekday::sunday,    weekday::saturday,
+      weekday::friday,   weekday::thursday,  weekday::wednesday,
+      weekday::tuesday,  weekday::monday,
+  };
+  // 原理和 next_weekday() 类似
+  weekday base = get_weekday(cd);
+  for (int i = 0;; ++i) {
+    if (base == k_weekdays_back[i]) {
+      for (int j = i + 1;; ++j) {
+        if (wd == k_weekdays_back[j]) {
+          return cd - (j - i);
+        }
+      }
+    }
+  }
+}
+```
+
+## yearday
+除此之外，还有函数获取对应时间位于一年的第几天
+```c++
+CONSTEXPR_F int get_yearday(const civil_second& cs) noexcept {
+  CONSTEXPR_D int k_month_offsets[1 + 12] = {
+      -1, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
+  };
+  // 如果已经在 2 月后了，并且今年是闰年，则 2 月有 29 天， feb29 为 1
+  const int feb29 = (cs.month() > 2 && impl::is_leap_year(cs.year()));
+  // 打表，从表中拿到天数，加上 2 月可能要多加的 1 天和这个月所在的天数
+  return k_month_offsets[cs.month()] + feb29 + cs.day();
+}
+```
+
